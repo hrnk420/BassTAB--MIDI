@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIDI to BASS TAB Sequencer</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        @keyframes note-add-anim {
+            from { transform: scale(0.4); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        @keyframes note-remove-anim {
+            from { transform: scale(1); opacity: 1; }
+            to { transform: scale(0.4); opacity: 0; }
+        }
+        @keyframes pulse-accent {
+            0%   { background-color: var(--accent-color); }
+            50%  { background-color: color-mix(in srgb, var(--accent-color) 60%, var(--primary-surface-color)); }
+            100% { background-color: var(--accent-color); }
+        }
+        @keyframes rotate-icon {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .icon-rotate { animation: rotate-icon 0.4s cubic-bezier(0.2, 0.8, 0.2, 1.2); }
+        /* CSS Variables for Theming */
+        :root { /* Light Theme */
+            --bg-color: #f4f7f9;
+            --primary-surface-color: #ffffff;
+            --secondary-surface-color: #f0f3f5;
+            --border-color: #dee2e6;
+            --text-color-primary: #212529;
+            --text-color-secondary: #6c757d;
+            --accent-color: #007bff;
+            --accent-color-hover: #0069d9;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+            --info-color: #17a2b8;
+            --shadow-color: rgba(0, 0, 0, 0.08);
+            --font-family-sans-serif: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --font-family-monospace: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        }
+        [data-theme="dark"] { /* Dark Theme */
+            --bg-color: #121212;
+            --primary-surface-color: #1e1e1e;
+            --secondary-surface-color: #2a2a2a;
+            --border-color: #3a3a3a;
+            --text-color-primary: #e0e0e0;
+            --text-color-secondary: #888888;
+            --accent-color: #00aeff;
+            --accent-color-hover: #33bbff;
+            --shadow-color: rgba(0, 0, 0, 0.4);
+        }
+
+        /* Base Styles & Animations */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        html, body { height: 100%; }
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color-primary);
+            font-family: var(--font-family-sans-serif);
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        .card, .transport-bar { animation: fadeIn 0.5s ease-out; }
+
+        /* General component overrides */
+        .card {
+            background-color: var(--primary-surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 4px 12px var(--shadow-color);
+            transition: all 0.3s ease;
+        }
+        .card-header {
+            background-color: rgba(0,0,0,0.02);
+            border-bottom: 1px solid var(--border-color);
+        }
+        h1, h4, h5, h6 { color: var(--text-color-primary); }
+        .text-muted { color: var(--text-color-secondary) !important; }
+        hr { border-top: 1px solid var(--border-color); }
+        pre, .bg-light {
+            background-color: var(--secondary-surface-color) !important;
+            color: var(--text-color-primary);
+            border: 1px solid var(--border-color) !important;
+            border-radius: 8px;
+        }
+        .modal-content { background-color: var(--primary-surface-color); border: 1px solid var(--border-color); }
+        .modal-header, .modal-footer { border-bottom-color: var(--border-color); border-top-color: var(--border-color); }
+        .close { color: var(--text-color-primary); text-shadow: none; opacity: 0.8; }
+        .close:hover { color: var(--accent-color); opacity: 1; }
+        .list-group-item { background-color: var(--secondary-surface-color); border-color: var(--border-color); color: var(--text-color-primary); }
+        .list-group-item-action:hover, .list-group-item-action:focus { background-color: rgba(0,0,0,0.1); }
+        .list-group-item.active { background-color: var(--accent-color); border-color: var(--accent-color); }
+
+        /* Form controls */
+        .form-control, .form-control-file { background-color: var(--secondary-surface-color); border: 1px solid var(--border-color); color: var(--text-color-primary); border-radius: 8px; transition: all 0.2s ease; }
+        .form-control:focus { background-color: var(--secondary-surface-color); color: var(--text-color-primary); border-color: var(--accent-color); box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--accent-color) 25%, transparent); }
+
+        /* Buttons */
+        .btn { border-radius: 8px; transition: all 0.2s ease-in-out; font-weight: 500; }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 8px var(--shadow-color); }
+        .btn:active { transform: scale(0.97); }
+
+        /* Title Style */
+        .main-title {
+            font-weight: 700;
+            background: linear-gradient(45deg, var(--accent-color), color-mix(in srgb, var(--accent-color) 60%, #ffffff));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            padding-bottom: 5px; /* Add some padding to prevent descenders from being cut off */
+        }
+
+        /* Language Toggle */
+        .language-toggle-container {
+            position: relative;
+        }
+        .language-toggle-container .btn-group-toggle {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 2px;
+            display: flex; /* Use flexbox */
+        }
+        .language-toggle-container .btn {
+            border: none;
+            z-index: 1;
+            transition: color 0.4s ease;
+            background-color: transparent; /* Ensure buttons are transparent */
+        }
+        .language-toggle-container .btn.active {
+            background-color: transparent; /* Override Bootstrap active style */
+            color: #fff; /* Text color for active button */
+        }
+        .language-toggle-container .btn:not(.active):hover {
+            color: var(--accent-color);
+            background-color: transparent;
+        }
+        .language-slider {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            height: calc(100% - 4px);
+            background-color: var(--accent-color);
+            border-radius: 6px;
+            z-index: 0;
+            transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1.2);
+        }
+
+        /* Header & Theme Toggle */
+        #theme-toggle {
+            display: flex; align-items: center; justify-content: center;
+            width: 38px; height: 38px; padding: 0; border-radius: 50%;
+        }
+        #theme-toggle svg { width: 18px; height: 18px; transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1.2); }
+        #theme-toggle:hover svg { transform: scale(1.1) rotate(20deg); }
+        
+        /* Transport Bar */
+        .transport-bar { background-color: var(--primary-surface-color); padding: 10px 15px; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: 0 2px 8px var(--shadow-color); }
+        .transport-bar .btn { width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; padding: 0; font-size: 1.2rem; border-radius: 50%; }
+
+        /* Piano */
+        #piano-container { display: flex; justify-content: center; padding: 20px 0; background: linear-gradient(to bottom, color-mix(in srgb, var(--bg-color) 80%, black), color-mix(in srgb, var(--bg-color) 90%, black) ); border-radius: 8px; overflow-x: auto; border: 1px solid color-mix(in srgb, var(--border-color) 50%, black); box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+        .key { border: 1px solid #000; box-sizing: border-box; transition: all 0.15s ease-out; }
+        .white { width: 38px; height: 160px; background: linear-gradient(to bottom, #f9f9f9, #e0e0e0); border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; position: relative; box-shadow: inset 0 -2px 5px rgba(0,0,0,0.2), 0 2px 3px rgba(0,0,0,0.3); }
+        .black { width: 22px; height: 100px; background: linear-gradient(to bottom, #333, #111); position: relative; margin-left: -11px; margin-right: -11px; z-index: 2; border-radius: 3px; box-shadow: inset 0 -2px 3px rgba(255,255,255,0.1), 0 2px 3px rgba(0,0,0,0.5); }
+        .key.highlight-cursor { background-image: linear-gradient(to top, var(--accent-color), var(--accent-color-hover)); transform: translateY(3px); box-shadow: inset 0 -1px 2px rgba(0,0,0,0.4), 0 1px 1px rgba(0,0,0,0.4); }
+        .key.highlight-playback { background-image: linear-gradient(to top, var(--danger-color), color-mix(in srgb, var(--danger-color) 80%, white)); transform: translateY(3px); box-shadow: inset 0 -1px 2px rgba(0,0,0,0.4), 0 1px 1px rgba(0,0,0,0.4); }
+        .key.highlight-hover { background-image: linear-gradient(to top, var(--success-color), color-mix(in srgb, var(--success-color) 80%, white)); box-shadow: 0 0 10px color-mix(in srgb, var(--success-color) 50%, transparent); }
+        .key .note-name { position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); font-size: 12px; pointer-events: none; }
+        .white .note-name { color: #000; z-index: 3; }
+        .black .note-name { color: #ccc; }
+
+        /* TAB Output */
+        #tab-output { font-size: 16px; border: 1px solid var(--border-color); padding: 15px; min-height: 100px; max-height: 400px; background-color: var(--secondary-surface-color); overflow: auto; border-radius: 8px; }
+        .tab-row { margin-bottom: 20px; }
+        .tab-string { display: flex; align-items: center; height: 25px; font-family: var(--font-family-monospace); white-space: nowrap; }
+        .string-label { width: 30px; text-align: right; margin-right: 5px; color: var(--text-color-secondary); }
+        .fret-step { display: inline-block; width: 2.2em; text-align: left; user-select: none; cursor: pointer; transition: background-color 0.15s, color 0.15s; border-radius: 4px; padding: 0 2px; }
+        .fret-step:hover { background-color: color-mix(in srgb, var(--accent-color) 20%, transparent); }
+        .fret-step.cursor { background-color: var(--accent-color); color: #fff; font-weight: bold; animation: pulse-accent 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        .fret-step.playback-cursor { background-color: var(--danger-color); color: #fff; }
+        .fret-step.note-added { animation: note-add-anim 0.3s ease-out; }
+        .fret-step.note-removing { animation: note-remove-anim 0.3s ease-out forwards; }
+        .measure-divider { display: inline-block; width: 1em; text-align: center; user-select: none; color: color-mix(in srgb, var(--text-color-secondary) 50%, transparent); }
+        .measure-labels { display: flex; font-family: var(--font-family-monospace); padding-left: 35px; }
+        .measure-label { display: inline-block; width: calc(2.2em * 8 + 1em); text-align: left; font-size: 12px; color: var(--text-color-secondary); border-left: 1px solid var(--border-color); padding-left: 5px; box-sizing: border-box; }
+        .measure-label:first-child { border-left: none; }
+
+        /* Accordion */
+        .accordion .card-header { cursor: pointer; padding: .75rem 1.25rem; transition: background-color 0.2s; }
+        .accordion .card-header:hover { background-color: color-mix(in srgb, var(--primary-surface-color) 50%, var(--secondary-surface-color)); }
+        .accordion .card { margin-bottom: 0; border-radius: 0; border-top: none; }
+        .accordion > .card:first-of-type { border-top: 1px solid var(--border-color); border-top-left-radius: 12px; border-top-right-radius: 12px; }
+        .accordion > .card:last-of-type { border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; }
+        
+        /* Scrollbars */
+        ::-webkit-scrollbar { width: 8px; height: 8px;}
+        ::-webkit-scrollbar-track { background: var(--secondary-surface-color); }
+        ::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #777; }
+    </style>
+  <script type="module" crossorigin>(function(){const t=document.createElement("link").relList;if(t&&t.supports&&t.supports("modulepreload"))return;for(const r of document.querySelectorAll('link[rel="modulepreload"]'))n(r);new MutationObserver(r=>{for(const s of r)if(s.type==="childList")for(const u of s.addedNodes)u.tagName==="LINK"&&u.rel==="modulepreload"&&n(u)}).observe(document,{childList:!0,subtree:!0});function a(r){const s={};return r.integrity&&(s.integrity=r.integrity),r.referrerPolicy&&(s.referrerPolicy=r.referrerPolicy),r.crossOrigin==="use-credentials"?s.credentials="include":r.crossOrigin==="anonymous"?s.credentials="omit":s.credentials="same-origin",s}function n(r){if(r.ep)return;r.ep=!0;const s=a(r);fetch(r.href,s)}})();let he="en";const i={messages:{webMidiNotSupported:{en:"Web MIDI API is not supported in this browser.",ja:"このブラウザはWeb MIDI APIをサポートしていません。"},midiAccessFailed:{en:"Failed to access MIDI devices.",ja:"MIDIデバイスへのアクセスに失敗しました。"},midiReady:{en:"MIDI devices are ready.",ja:"MIDIデバイスの準備ができました。"},midiInputDetected:{en:"MIDI Input Device Detected: ${name}",ja:"MIDI入力デバイスを検出: ${name}"},midiStateChange:{en:"MIDI device state change: ${name}, ${connection}, ${state}",ja:"MIDIデバイスの状態変更: ${name}, ${connection}, ${state}"},midiConnected:{en:"${name} was connected.",ja:"${name} が接続されました。"},internalSynth:{en:"Internal Synthesizer (Browser Audio)",ja:"内蔵シンセサイザー (Browser Audio)"},externalMidi:{en:"-- External MIDI Devices --",ja:"-- 外部MIDIデバイス --"},cursorOutOfBounds:{en:"Cursor is out of bounds. Please add a new measure.",ja:"カーソルが範囲外です。[小節の追加]ボタンを押してください。"},endOfScore:{en:"Reached the end of the score. Please add a new measure.",ja:"曲の最後に達しました。[小節の追加]ボタンを押してください。"},selectMidiOutput:{en:"Please select a MIDI Output device first.",ja:"先にMIDI Outputデバイスを選択してください。"},noDataToPlay:{en:"There is no data to play.",ja:"再生するデータがありません。"},cannotDeleteLastMeasure:{en:"The last measure cannot be deleted.",ja:"最後の1小節は削除できません。"},confirmDeleteMeasure:{en:"Are you sure you want to delete Measure ${measure}?",ja:"${measure}小節を本当に削除しますか？"},confirmClearScore:{en:"Are you sure you want to clear the entire score?",ja:"スコアをすべて消去しますか？"},invalidMidiNote:{en:"Invalid MIDI note for string ${string}.",ja:"弦 ${string} のMIDIノートが無効です。"},confirmTuningChange:{en:"Changing the tuning will reset the current score. Are you sure?",ja:"チューニングを変更すると現在のスコアはリセットされます。よろしいですか？"},noScoreData:{en:"There is no data in the score.",ja:"スコアにデータがありません。"},noNotesInScore:{en:"There are no notes in the score.",ja:"スコアにノートがありません。"},invalidJson:{en:"Invalid JSON: ${error}",ja:"無効なJSONです: ${error}"},scoreImported:{en:"Score imported successfully from JSON file.",ja:"スコアをJSONファイルから読み込みました。"},jsonNotArray:{en:"JSON data is not a valid score format (must be an array).",ja:"JSONデータが有効なスコア形式ではありません（配列である必要があります）。"},invalidMeasureStructure:{en:"JSON data does not appear to be a valid score file (invalid measure structure).",ja:"JSONデータが有効なスコアファイルではないようです（無効な小節構造）。"},fileReadParseError:{en:"Failed to read or parse the file.\nError: ${error}",ja:"ファイルの読み込みまたは解析に失敗しました。\nエラー: ${error}"},fileReadError:{en:"Failed to read the file.",ja:"ファイルの読み込みに失敗しました。"},measure:{en:"Measure",ja:"小節"},step:{en:"Step",ja:"拍"},currentPosition:{en:"Current Position",ja:"現在位置"},string:{en:"String",ja:"弦"},fret:{en:"Fret",ja:"フレット"},modalTitleError:{en:"Error",ja:"エラー"},modalTitleSuccess:{en:"Success",ja:"成功"},modalTitleConfirmDelete:{en:"Confirm Delete",ja:"削除の確認"},modalTitleConfirmClear:{en:"Confirm Clear",ja:"全消去の確認"},modalTitleConfirmTuningChange:{en:"Confirm Tuning Change",ja:"チューニング変更の確認"},modalTitleMidiError:{en:"MIDI Error",ja:"MIDIエラー"},modalTitleAudioError:{en:"Audio Error",ja:"オーディオエラー"},modalTitlePlaybackError:{en:"Playback Error",ja:"再生エラー"},modalTitleImportError:{en:"Import Error",ja:"インポートエラー"},modalTitleExportError:{en:"Export Error",ja:"エクスポートエラー"},modalTitleSlideInput:{en:"Slide Input",ja:"スライド入力"},modalTitleSlideAdded:{en:"Slide Added",ja:"スライド追加完了"},modalTitleScoreEnd:{en:"Score End",ja:"曲の終端"},slideAddedMessage:{en:"Slide from ${startFret} to ${endFret} on string ${stringNum} added.",ja:"弦 ${stringNum} の ${startFret} から ${endFret} へのスライドを追加しました。"},slideInputMessage:{en:"Now play the MIDI note for the END of the slide.",ja:"スライドの終了点のMIDIノートを演奏してください。"},noNoteForSlideMessage:{en:"No note at cursor to apply slide to.",ja:"カーソル位置にスライドを適用するノートがありません。"},cannotCreateSlideMessage:{en:"Cannot create slide: MIDI Note ${note} is not playable on string ${stringNum}.",ja:"スライドを作成できません: MIDIノート ${note} は弦 ${stringNum} で演奏できません。"},noStartNoteForSlideMessage:{en:"No starting note found for slide.",ja:"スライドの開始ノートが見つかりません。"},articulation_slide:{en:"Slide",ja:"スライド"},articulation_hammer_on:{en:"Hammer-on",ja:"ハンマリング"},articulation_pull_off:{en:"Pull-off",ja:"プリング"},articulationInputTitle:{en:"${articulation} Input",ja:"${articulation}入力"},articulationInputMessage:{en:"Play the MIDI note for the END of the ${articulation}.",ja:"${articulation}の終了点となるMIDIノートを演奏してください。"},articulationAddedTitle:{en:"${articulation} Added",ja:"${articulation}追加完了"}},translate(e,t={}){var n,r;let a=((n=this.messages[e])==null?void 0:n[he])||((r=this.messages[e])==null?void 0:r.en)||e;for(const s in t)a=a.replace(`\${${s}}`,t[s]);return a}};navigator.requestMIDIAccess?navigator.requestMIDIAccess().then(Ne,Se):(console.log("Web MIDI API is not supported in this browser."),v(i.translate("modalTitleMidiError"),i.translate("webMidiNotSupported")));function Ne(e){console.log("MIDI Access Object",e),document.getElementById("midi-log").innerHTML+=`<p>${i.translate("midiReady")}</p>`;const t=e.inputs.values();for(let n=t.next();n&&!n.done;n=t.next())console.log("Found MIDI input:",n.value),document.getElementById("midi-log").innerHTML+=`<p>${i.translate("midiInputDetected",{name:n.value.name})}</p>`,n.value.onmidimessage=fe;const a=document.getElementById("midiOutput");a.innerHTML=`<option value="internal_synth">${i.translate("internalSynth")}</option>`,ie=Array.from(e.outputs.values()),ie.length>0&&(a.innerHTML+=`<option value="" disabled>${i.translate("externalMidi")}</option>`,ie.forEach(n=>{a.innerHTML+=`<option value="${n.id}">${n.name}</option>`})),L="internal_synth",a.addEventListener("change",n=>{const r=n.target.value;r==="internal_synth"?(L="internal_synth",console.log("Internal Synthesizer selected."),K.init()):(L=e.outputs.get(r),console.log("MIDI Output selected:",L))}),e.onstatechange=n=>{const r=n.port,s=document.getElementById("midi-log");s.innerHTML+=`<p>${i.translate("midiStateChange",{name:r.name,connection:r.connection,state:r.state})}</p>`,r.type==="input"&&r.state==="connected"&&(r.onmidimessage=fe,s.innerHTML+=`<p>${i.translate("midiConnected",{name:r.name})}</p>`)}}function Se(){const e=i.translate("midiAccessFailed");console.log(e),document.getElementById("midi-log").innerHTML+=`<p class="text-danger">${e}</p>`,v(i.translate("modalTitleMidiError"),e)}function fe(e){const t=e.data[0],a=e.data[1],n=e.data.length>2?e.data[2]:0,r=document.getElementById("midi-log"),s=`Command: ${t}, Note: ${a}, Velocity: ${n}`;switch(console.log(s),r.innerHTML+=`<p>${s}</p>`,t){case 144:n>0&&$e(a);break}}function se(e,t,a){const n=new Blob([t],{type:a}),r=URL.createObjectURL(n),s=document.createElement("a");s.href=r,s.download=e,document.body.appendChild(s),s.click(),document.body.removeChild(s),URL.revokeObjectURL(r)}function be(e){const t=e.numberOfChannels,a=e.length*t*2+44,n=new ArrayBuffer(a),r=new DataView(n),s=[];let u,y,M=0,T=0;for(I(1179011410),I(a-8),I(1163280727),I(544501094),I(16),b(1),b(t),I(e.sampleRate),I(e.sampleRate*2*t),b(t*2),b(16),I(1635017060),I(a-T-4),u=0;u<e.numberOfChannels;u++)s.push(e.getChannelData(u));for(;T<a;){for(u=0;u<t;u++)y=Math.max(-1,Math.min(1,s[u][M])),y=(.5+y<0?y*32768:y*32767)|0,r.setInt16(T,y,!0),T+=2;M++}return new Blob([r],{type:"audio/wav"});function b(k){r.setUint16(T,k,!0),T+=2}function I(k){r.setUint32(T,k,!0),T+=4}}let z=[40,45,50,55],ye="shortestFret",F=null,ce=36,de=84;const Le=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];function Ae(e){const t=Math.floor(e/12)-1;return Le[e%12]+t}function ue(e){let t=!1;return e<ce&&(ce=Math.floor(e/12)*12,t=!0),e>de&&(de=Math.min(127,Math.ceil(e/12)*12+11),t=!0),t&&Me(document.getElementById("piano-container")),t}const K={init:function(){if(!F)try{F=new(window.AudioContext||window.webkitAudioContext)}catch{console.error("Web Audio API is not supported in this browser."),v(i.translate("modalTitleAudioError"),i.translate("webMidiNotSupported"))}},activeOscillators:{},midiToFreq:function(e){return 440*Math.pow(2,(e-69)/12)},playNote:function(e,t){if(F||this.init(),!F)return;const a=F.createOscillator(),n=F.createGain();a.connect(n),n.connect(F.destination),a.type="triangle";const r=F.currentTime,s=100/127;if((e.articulation==="slide"||e.articulation==="hammer-on"||e.articulation==="pull-off")&&e.endMidiNote!==void 0){const u=this.midiToFreq(e.midiNote),y=this.midiToFreq(e.endMidiNote);a.frequency.setValueAtTime(u,r),a.frequency.linearRampToValueAtTime(y,r+t/1e3)}else a.frequency.value=this.midiToFreq(e.midiNote);n.gain.setValueAtTime(0,r),n.gain.linearRampToValueAtTime(s*.7,r+.02),n.gain.linearRampToValueAtTime(s*.5,r+.1),a.start(r),this.activeOscillators[e.midiNote]=a,a.onended=()=>{delete this.activeOscillators[e.midiNote]},n.gain.setValueAtTime(s*.5,r+t/1e3-.05),n.gain.linearRampToValueAtTime(0,r+t/1e3),a.stop(r+t/1e3)},stopAll:function(){if(!F)return;const e=F.currentTime;for(const t in this.activeOscillators)try{this.activeOscillators[t].stop(e)}catch{}this.activeOscillators={}}};let ie=[],L=null,q=!1,_=!1,Ie=null,Z=120,A=0,w=0,l=[],g=0,p=0,C=[],D=-1,B=null;const xe=100;let te=null,Y=[],J=0,X=null;const x=8,ne=4;function R(e=!1){const t={scoreData:JSON.parse(JSON.stringify(l)),currentMeasureIndex:g,currentStepIndex:p};if(!e&&C.length>0){const a=C[D];if(JSON.stringify(t.scoreData)===JSON.stringify(a.scoreData)&&t.currentMeasureIndex===a.currentMeasureIndex&&t.currentStepIndex===a.currentStepIndex)return}D<C.length-1&&(C=C.slice(0,D+1)),C.push(t),D++,localStorage.setItem("bassTabData",JSON.stringify(t)),C.length>xe&&(C.shift(),D--),re()}function ke(){D>0&&(D--,Ee(C[D]),re())}function De(){D<C.length-1&&(D++,Ee(C[D]),re())}function Ee(e){l=JSON.parse(JSON.stringify(e.scoreData)),g=e.currentMeasureIndex,p=e.currentStepIndex,S()}function re(){const e=document.getElementById("undoButton"),t=document.getElementById("redoButton");e&&(e.disabled=D<=0),t&&(t.disabled=D>=C.length-1)}function V(){const e={steps:[]};for(let t=0;t<x;t++)e.steps.push({notes:[]});return l.push(e),R(),e}async function $e(e){var n,r;if(ue(e),X&&B){const s=B.measure,u=B.step,y=B.string,M=(r=(n=l[s])==null?void 0:n.steps[u])==null?void 0:r.notes.find(T=>T.string===y);if(M){const b=me(e,z).find(I=>I.string===y);if(b){M.articulation=X,M.endFret=b.fret,M.endMidiNote=e;const I=i.translate(`articulation_${X.replace("-","_")}`);X=null,R(),S(),await v(i.translate("articulationAddedTitle",{articulation:I}),i.translate("slideAddedMessage",{startFret:M.fret,endFret:b.fret,stringNum:y}))}else await v(i.translate("modalTitleError"),i.translate("cannotCreateSlideMessage",{note:e,stringNum:y}))}else await v(i.translate("modalTitleError"),i.translate("noStartNoteForSlideMessage"));X=null;return}const t=me(e,z);if(t.length===0){console.warn(`MIDI Note ${e} is unplayable.`);return}let a=Pe(e,z,ye);if(!a){console.error("Could not determine a best position.");return}te=e,Y=t.sort((s,u)=>s.fret!==u.fret?s.fret-u.fret:s.string-u.string),J=Y.findIndex(s=>s.string===a.string&&s.fret===a.fret),J===-1&&(J=0),ve(e,a,!0)}async function ve(e,t,a=!0){const n={midiNote:e,string:t.string,fret:t.fret};if(!l[g]||!l[g].steps[p]){console.error("Cursor is out of bounds. Add a measure."),await v(i.translate("modalTitleError"),i.translate("cursorOutOfBounds"));return}const r=l[g].steps[p].notes,s=r.findIndex(u=>u.midiNote===e);s!==-1&&r.splice(s,1),r.push(n),B={measure:g,step:p,string:t.string},a&&je(),R(),S()}function Ce(){g===0&&p===0||(p--,p<0&&(g--,p=x-1),S())}function Be(){p++,p>=x&&(p=0,g++,g>=l.length&&V()),S()}async function je(){p++,p>=x&&(p=0,g++,g>=l.length&&(g=l.length-1,p=x-1,await v(i.translate("modalTitleScoreEnd"),i.translate("endOfScore"))))}function S(){var r,s;const e=document.getElementById("tab-output");e.innerHTML="";for(let u=0;u<l.length;u+=ne){const y=l.slice(u,u+ne),M=document.createElement("div");M.className="tab-row";const T=document.createElement("div");T.className="measure-labels";let b="";for(let I=0;I<y.length;I++)b+=`<span class="measure-label">${i.translate("measure")} ${u+I+1}</span>`;T.innerHTML=b,M.appendChild(T);for(let I=1;I<=z.length;I++){const k=document.createElement("div");k.className="tab-string";let j=`<span class="string-label">${I}:|</span>`;for(let o=0;o<y.length;o++){const d=y[o],f=u+o;for(let m=0;m<d.steps.length;m++){const c=d.steps[m].notes.find(Q=>Q.string===I);let E="-";c&&(c.articulation==="slide"&&c.endFret!==void 0?E=`${c.fret}s${c.endFret}`:c.articulation==="hammer-on"&&c.endFret!==void 0?E=`${c.fret}h${c.endFret}`:c.articulation==="pull-off"&&c.endFret!==void 0?E=`${c.fret}p${c.endFret}`:E=c.fret.toString());let N=E.length===1?E+"-":E;const H=f===g&&m===p,O=(q||_)&&f===A&&m===w;let P="fret-step";H&&(P+=" cursor"),O&&(P+=" playback-cursor"),B&&B.measure===f&&B.step===m&&B.string===I&&c&&(P+=" note-added"),j+=`<span class="${P}" data-measure-index="${f}" data-step-index="${m}" data-string-num="${I}">${N}</span>`}j+='<span class="measure-divider">|</span>'}k.innerHTML=j,M.appendChild(k)}e.appendChild(M)}document.getElementById("raw-tab-data").textContent=JSON.stringify(l,null,2),Fe();const t=(r=l[g])==null?void 0:r.steps[p],a=t?t.notes.map(u=>u.midiNote):[];let n=[];if(q||_){const u=(s=l[A])==null?void 0:s.steps[w];n=u?u.notes.map(y=>y.midiNote):[]}Oe(q||_?[]:a,n),B=null}function v(e,t,a=!1){const n=$("#appModal");n.find("#appModalLabel").text(e),n.find("#appModalBody").text(t);const r=n.find("#appModalOk"),s=n.find("#appModalCancel");return s.toggle(a),new Promise(u=>{r.off("click").on("click",()=>{n.modal("hide"),u(!0)}),s.off("click").on("click",()=>{u(!1)}),n.off("hidden.bs.modal").on("hidden.bs.modal",()=>{Promise.resolve(r.data("clicked"))!==r.data("clicked")&&u(!1),r.data("clicked",!1)}),r.data("clicked",!1),r.on("click",()=>r.data("clicked",!0)),n.modal("show")})}function Me(e){if(!e)return;e.innerHTML="";const t=a=>[1,3,6,8,10].includes(a%12);for(let a=ce;a<=de;a++){const n=document.createElement("div"),r=t(a)?"black":"white";n.className=`key ${r}`,n.dataset.note=a;const s=document.createElement("span");s.className="note-name",s.textContent=Ae(a),n.appendChild(s),e.appendChild(n)}}function Oe(e=[],t=[]){document.querySelectorAll("#piano-container .key").forEach(a=>{a.classList.remove("highlight-cursor","highlight-playback")}),e.forEach(a=>{const n=document.querySelector(`.key[data-note="${a}"]`);n&&n.classList.add("highlight-cursor")}),t.forEach(a=>{const n=document.querySelector(`.key[data-note="${a}"]`);n&&(n.classList.remove("highlight-cursor"),n.classList.add("highlight-playback"))})}function me(e,t){const a=[];for(let n=0;n<t.length;n++){const r=t[n];if(e>=r){const s=e-r;s<=24&&a.push({string:t.length-n,fret:s})}}return a}function Pe(e,t,a){const n=me(e,t);return n.length===0?null:(a==="lowestString"||n.sort((r,s)=>r.fret!==s.fret?r.fret-s.fret:s.string-r.string),n[0])}function ge(e){var r,s;if(te===null||Y.length===0)return;const t=(s=(r=l[g])==null?void 0:r.steps[p])==null?void 0:s.notes;if(!t)return;const a=t.findIndex(u=>u.midiNote===te);if(a===-1)return;J+=e,J<0?J=Y.length-1:J>=Y.length&&(J=0);const n=Y[J];t.splice(a,1),ve(te,n,!1)}function Fe(){const e=document.getElementById("mapping-table");e.innerHTML=`<p>${i.translate("currentPosition")}: ${i.translate("measure")} ${g+1}, ${i.translate("step")} ${p+1}</p>`}function ae(){if(!(!q&&!_)){if(clearInterval(Ie),q=!1,_=!1,L==="internal_synth")K.stopAll();else if(L)for(let e=0;e<128;e++)L.send([128,e,0]);S(),console.log("Playback stopped.")}}async function pe(){if(q)return;if(!L){await v(i.translate("modalTitlePlaybackError"),i.translate("selectMidiOutput"));return}if(l.length===0||l.length===1&&l[0].steps.every(t=>t.notes.length===0)){await v(i.translate("modalTitlePlaybackError"),i.translate("noDataToPlay"));return}q=!0,A=0,w=0,console.log("Playback started.");const e=60/Z*500;Ie=setInterval(()=>{if(A>=l.length){ae();return}const t=l[A].steps[w];if(t&&t.notes.length>0){const a=60/Z*500;t.notes.forEach(n=>{L==="internal_synth"?K.playNote(n,a*.95):L&&(L.send([144,n.midiNote,100]),setTimeout(()=>{q&&L.send([128,n.midiNote,0])},a*.9))})}S(),w++,w>=x&&(w=0,A++)},e)}async function le(e=!0){if(l.length===0||l.length===1&&l[0].steps.every(a=>a.notes.length===0)){await v(i.translate("modalTitlePlaybackError"),i.translate("noDataToPlay"));return}if(q&&ae(),_=!0,A>=l.length){A=0,w=0,_=!1,S(),console.log("Reached end of score. Resetting playback position.");return}const t=l[A].steps[w];if(t&&t.notes.length>0){const a=60/Z*500;t.notes.forEach(n=>{L==="internal_synth"?K.playNote(n,a*.95):L&&(L.send([144,n.midiNote,100]),setTimeout(()=>L.send([128,n.midiNote,0]),a*.9))})}S(),e&&(w++,w>=x&&(w=0,A++)),A>=l.length&&e&&(_=!1)}function Re(){let e="";const t=x*3-1;for(let a=0;a<l.length;a+=ne){const n=l.slice(a,a+ne);let r="    ";for(let s=0;s<n.length;s++){const u=a+s+1,y=`${i.translate("measure")} ${u}`,M=t+1;r+=y.padEnd(M," ")}e+=r.trimEnd()+`
+`;for(let s=1;s<=z.length;s++){let u=` ${s}:|`;for(let y=0;y<n.length;y++){const M=n[y],T=[];for(let b=0;b<M.steps.length;b++){const k=M.steps[b].notes.find(d=>d.string===s);let j="-";k&&(j=k.fret.toString());let o=j.length===1?j+"-":j;T.push(o)}u+=T.join(" ")+"|"}e+=u+`
+`}e+=`
+`}return e}document.addEventListener("DOMContentLoaded",()=>{const e=o=>{he=o,localStorage.setItem("language",o),document.querySelectorAll("[data-lang-en]").forEach(h=>{const c=h.getAttribute("data-lang-"+o);c&&(h.innerHTML=c)}),document.querySelectorAll("[data-lang-en-placeholder]").forEach(h=>{const c=h.getAttribute("data-lang-"+o+"-placeholder");c&&(h.placeholder=c)}),document.querySelectorAll("[data-lang-en-title]").forEach(h=>{const c=h.getAttribute("data-lang-"+o+"-title");c&&(h.title=c)});const d=document.getElementById("lang-en-label"),f=document.getElementById("lang-ja-label"),m=document.querySelector(".language-slider");o==="ja"?(f.classList.add("active"),d.classList.remove("active"),m.style.width=`${f.offsetWidth}px`,m.style.left=`${f.offsetLeft}px`):(d.classList.add("active"),f.classList.remove("active"),m.style.width=`${d.offsetWidth}px`,m.style.left=`${d.offsetLeft}px`),S()};document.getElementById("lang-en-label").addEventListener("click",()=>e("en")),document.getElementById("lang-ja-label").addEventListener("click",()=>e("ja"));const t=document.getElementById("theme-toggle"),a='<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-sun-fill" viewBox="0 0 16 16"><path d="M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0zm0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13zm8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5zM3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8zm10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0zm-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0zm9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707zM4.464 4.465a.5.5 0 0 1-.707 0L2.343 3.05a.5.5 0 1 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707z"/></svg>',n='<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-moon-stars-fill" viewBox="0 0 16 16"><path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"/><path d="M10.794 3.148a.217.217 0 0 1 .412 0l.387 1.162h1.212a.217.217 0 0 1 .134.386l-.979.715.387 1.162a.217.217 0 0 1-.316.242l-.979-.715-.979.715a.217.217 0 0 1-.316-.242l.387-1.162-.979-.715a.217.217 0 0 1 .134-.386h1.212l.387-1.162zM13.863.099a.145.145 0 0 1 .274 0l.258.774c.115.346.386.617.732.732l.774.258a.145.145 0 0 1 0 .274l-.774.258a1.156 1.156 0 0 0-.732.732l-.258.774a.145.145 0 0 1-.274 0l-.258-.774a1.156 1.156 0 0 0-.732-.732l-.774-.258a.145.145 0 0 1 0-.274l.774-.258c.346-.115.617-.386.732-.732L13.863.1z"/></svg>',r=o=>{document.documentElement.setAttribute("data-theme",o),localStorage.setItem("theme",o),t.innerHTML=o==="dark"?a:n};t.addEventListener("click",()=>{const o=document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark";r(o);const d=t.querySelector("svg");d&&(d.classList.add("icon-rotate"),d.addEventListener("animationend",()=>{d.classList.remove("icon-rotate")},{once:!0}))});const s=localStorage.getItem("theme"),u=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches;r(s||(u?"dark":"light")),document.getElementById("playButton").innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-play-fill" viewBox="0 0 16 16"><path d="m11.596 8.697-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/></svg>',document.getElementById("stepPlayButton").innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-skip-end-fill" viewBox="0 0 16 16"><path d="M12.5 4a.5.5 0 0 0-1 0v3.248L5.233 3.612C4.713 3.31 4 3.655 4 4.308v7.384c0 .653.713.998 1.233.696L11.5 8.752V12a.5.5 0 0 0 1 0V4z"/></svg>',document.getElementById("stopButton").innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-stop-fill" viewBox="0 0 16 16"><path d="M5 3.5h6A1.5 1.5 0 0 1 12.5 5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 11V5A1.5 1.5 0 0 1 5 3.5z"/></svg>',document.getElementById("playButton").addEventListener("click",pe),document.getElementById("stopButton").addEventListener("click",ae),document.getElementById("stepPlayButton").addEventListener("click",()=>le(!0)),document.getElementById("tempo").addEventListener("change",o=>{const d=parseInt(o.target.value,10);!isNaN(d)&&d>=40&&d<=240&&(Z=d,q&&(ae(),pe()))}),document.getElementById("tab-output").addEventListener("click",o=>{var N;const d=o.target.closest(".fret-step");if(!d)return;const f=parseInt(d.dataset.measureIndex,10),m=parseInt(d.dataset.stepIndex,10),h=parseInt(d.dataset.stringNum,10);if(isNaN(f)||isNaN(m)||isNaN(h))return;const c=(N=l[f])==null?void 0:N.steps[m];if(!c)return;const E=c.notes.findIndex(H=>H.string===h);E!==-1?(d.classList.add("note-removing"),d.addEventListener("animationend",()=>{c.notes.splice(E,1),R(),S()},{once:!0})):(g=f,p=m,S())});const y=document.getElementById("piano-container");y.addEventListener("mouseover",o=>{const d=o.target.closest(".key");if(!d||!d.dataset.note)return;const f=d.dataset.note;document.querySelectorAll(".fret-step").forEach(m=>{var c;const h=(c=l[m.dataset.measureIndex])==null?void 0:c.steps[m.dataset.stepIndex];h&&h.notes.some(E=>E.midiNote==f&&E.string==m.dataset.stringNum)&&m.classList.add("highlight-hover")})}),y.addEventListener("mouseout",()=>{document.querySelectorAll(".fret-step.highlight-hover").forEach(o=>o.classList.remove("highlight-hover"))});const M=document.getElementById("tab-output");M.addEventListener("mouseover",o=>{var h;const d=o.target.closest(".fret-step");if(!d||d.textContent.startsWith("-"))return;const f=(h=l[d.dataset.measureIndex])==null?void 0:h.steps[d.dataset.stepIndex],m=f==null?void 0:f.notes.find(c=>c.string==d.dataset.stringNum);if(m){const c=document.querySelector(`.key[data-note="${m.midiNote}"]`);c&&c.classList.add("highlight-hover")}}),M.addEventListener("mouseout",()=>{document.querySelectorAll(".key.highlight-hover").forEach(o=>o.classList.remove("highlight-hover"))}),document.getElementById("deleteMeasure").addEventListener("click",async()=>{if(l.length<=1){await v(i.translate("modalTitleError"),i.translate("cannotDeleteLastMeasure"));return}await v(i.translate("modalTitleConfirmDelete"),i.translate("confirmDeleteMeasure",{measure:g+1}),!0)&&(l.splice(g,1),g>=l.length&&(g=l.length-1),R(),S())}),document.getElementById("addMeasure").addEventListener("click",()=>{V(),g=l.length-1,p=0,S()}),document.getElementById("clearAll").addEventListener("click",async()=>{await v(i.translate("modalTitleConfirmClear"),i.translate("confirmClearScore"),!0)&&(l=[],g=0,p=0,V(),R(),S())}),document.getElementById("undoButton").addEventListener("click",ke),document.getElementById("redoButton").addEventListener("click",De),document.getElementById("conversionMode").addEventListener("change",o=>{ye=o.target.value}),document.getElementById("applyTuning").addEventListener("click",async()=>{const o=[];let d=!0;for(let f=4;f>=1;f--){const m=parseInt(document.getElementById(`string${f}`).value,10);if(isNaN(m)||m<0||m>127){await v(i.translate("modalTitleError"),i.translate("invalidMidiNote",{string:f})),d=!1;break}o.push(m)}d&&await v(i.translate("modalTitleConfirmTuningChange"),i.translate("confirmTuningChange"),!0)&&(z=o,l=[],g=0,p=0,V(),R(),S())}),document.getElementById("importJsonInput").addEventListener("change",async o=>{const d=o.target.files[0];if(!d)return;const f=new FileReader;f.onload=async m=>{try{const h=JSON.parse(m.target.result);if(!Array.isArray(h))throw new Error(i.translate("jsonNotArray"));if(h.length>0){const c=h[0];if(typeof c!="object"||!c.hasOwnProperty("steps")||!Array.isArray(c.steps))throw new Error(i.translate("invalidMeasureStructure"))}if(l=h,l.length===0)V();else{let c=127,E=0;l.forEach(N=>N.steps.forEach(H=>H.notes.forEach(O=>{O.midiNote<c&&(c=O.midiNote),O.midiNote>E&&(E=O.midiNote)}))),E>0&&(ue(c),ue(E))}g=0,p=0,S(),R(!0),await v(i.translate("modalTitleSuccess"),i.translate("scoreImported"))}catch(h){await v(i.translate("modalTitleImportError"),i.translate("fileReadParseError",{error:h.message}))}finally{o.target.value=""}},f.onerror=async()=>{await v(i.translate("modalTitleImportError"),i.translate("fileReadError")),o.target.value=""},f.readAsText(d)}),document.getElementById("exportTextTab").addEventListener("click",()=>{const o=Re();se("bass_tab.txt",o,"text/plain")}),document.getElementById("exportJsonData").addEventListener("click",()=>{const o=JSON.stringify(l,null,2);se("bass_tab_data.json",o,"application/json")}),document.getElementById("exportWav").addEventListener("click",async()=>{const o=document.getElementById("exportWav"),d=o.innerHTML;o.disabled=!0,o.innerHTML='<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Rendering...';try{if(l.length===0||l.length===1&&l[0].steps.every(P=>P.notes.length===0)){await v(i.translate("modalTitleExportError"),i.translate("noDataToPlay"));return}const f=44100,m=60/Z/(x/4),c=l.length*x*m,E=new(window.OfflineAudioContext||window.webkitOfflineAudioContext)(1,f*c,f);let N=0;for(const P of l)for(const Q of P.steps){if(Q.notes.length>0){const ee=m*.95;for(const W of Q.notes){const U=E.createOscillator(),G=E.createGain();if(U.connect(G),G.connect(E.destination),U.type="triangle",(W.articulation==="slide"||W.articulation==="hammer-on"||W.articulation==="pull-off")&&W.endMidiNote!==void 0){const Te=K.midiToFreq(W.midiNote),we=K.midiToFreq(W.endMidiNote);U.frequency.setValueAtTime(Te,N),U.frequency.linearRampToValueAtTime(we,N+ee)}else U.frequency.value=K.midiToFreq(W.midiNote);const oe=100/127;G.gain.setValueAtTime(0,N),G.gain.linearRampToValueAtTime(oe*.7,N+.02),G.gain.linearRampToValueAtTime(oe*.5,N+.1),U.start(N),G.gain.setValueAtTime(oe*.5,N+ee-.05),G.gain.linearRampToValueAtTime(0,N+ee),U.stop(N+ee)}}N+=m}const H=await E.startRendering(),O=be(H);se("bass_tab.wav",O,"audio/wav")}catch(f){console.error("Failed to export WAV:",f),await v("Export Error",`An unexpected error occurred: ${f.message}`)}finally{o.disabled=!1,o.innerHTML=d}}),document.addEventListener("keydown",o=>{var d;if(!(o.target.tagName==="INPUT"||o.target.tagName==="TEXTAREA")){if(o.key==="ArrowLeft")o.preventDefault(),_?T():Ce();else if(o.key==="ArrowRight")o.preventDefault(),_?b():Be();else if(o.key==="ArrowUp")o.preventDefault(),ge(-1);else if(o.key==="ArrowDown")o.preventDefault(),ge(1);else if(o.key==="Delete")o.preventDefault(),I();else if(o.key==="s"||o.key==="S"||o.key==="h"||o.key==="H"||o.key==="p"||o.key==="P"){o.preventDefault();const f=o.key.toLowerCase();let m,h;f==="s"&&(m="slide",h=i.translate("articulation_slide")),f==="h"&&(m="hammer-on",h=i.translate("articulation_hammer_on")),f==="p"&&(m="pull-off",h=i.translate("articulation_pull_off"));const c=(d=l[g])==null?void 0:d.steps[p];if(c&&c.notes.length>0){const E=c.notes.sort((O,P)=>P.string-O.string)[0];B={measure:g,step:p,string:E.string},X=m;const N=i.translate("articulationInputTitle",{articulation:h}),H=i.translate("articulationInputMessage",{articulation:h});v(N,H)}else v(i.translate("modalTitleSlideInput"),i.translate("noNoteForSlideMessage"))}}});function T(){A===0&&w===0||(w--,w<0&&(A--,w=x-1),le(!1))}function b(){A>=l.length-1&&w>=x-1||(w++,w>=x&&(w=0,A++),le(!1))}function I(){g===0&&p===0||(p--,p<0&&(g>0?(g--,p=x-1):p=0),l[g]&&l[g].steps[p]&&(l[g].steps[p].notes=[]),R(),S())}Me(document.getElementById("piano-container")),z.forEach((o,d)=>{document.getElementById(`string${z.length-d}`).value=o});const k=localStorage.getItem("bassTabData");if(k)try{const o=JSON.parse(k);l=o.scoreData||[],g=o.currentMeasureIndex||0,p=o.currentStepIndex||0,l.length===0&&V()}catch(o){console.error("Failed to parse saved data from localStorage:",o),V()}else V();R(!0),S(),re();const j=localStorage.getItem("language")||"en";e(j)});</script>
+</head>
+<body>
+    <div class="container-fluid pt-4">
+        <!-- ROW 1: HEADER & PIANO -->
+        <div class="row">
+            <div class="col-12">
+                <!-- Header -->
+                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">
+                    <div class="d-flex align-items-center">
+                        <h1 class="mb-1 main-title" data-lang-en="MIDI to BASS TAB Sequencer" data-lang-ja="MIDI to BASS TAB シーケンサー">MIDI to BASS TAB Sequencer</h1>
+                        <button id="theme-toggle" class="btn btn-sm btn-outline-secondary ml-3" aria-label="Toggle theme"></button>
+                    </div>
+                    <div class="language-toggle-container">
+                        <div class="btn-group btn-group-toggle" data-toggle="buttons">
+                            <span class="language-slider"></span>
+                            <label class="btn btn-sm btn-outline-secondary" id="lang-en-label">
+                                <input type="radio" name="options" id="lang-en"> EN
+                            </label>
+                            <label class="btn btn-sm btn-outline-secondary" id="lang-ja-label">
+                                <input type="radio" name="options" id="lang-ja"> JA
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <!-- Piano -->
+                <div class="card mb-4">
+                    <div class="card-body p-2">
+                        <div id="piano-container"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ROW 2: MAIN CONTENT -->
+        <div class="row">
+                    <!-- Left Column -->
+                    <div class="col-md-8">
+                        <!-- Transport Bar -->
+                        <div class="transport-bar d-flex align-items-center flex-wrap mb-3 justify-content-center">
+                            <div class="btn-group mr-3 mb-2 mb-md-0">
+                                <button id="playButton" class="btn btn-success" data-lang-en-title="Play" data-lang-ja-title="再生"></button>
+                                <button id="stepPlayButton" class="btn btn-info" data-lang-en-title="Step" data-lang-ja-title="ステップ"></button>
+                                <button id="stopButton" class="btn btn-danger" data-lang-en-title="Stop" data-lang-ja-title="停止"></button>
+                            </div>
+                            <div class="d-flex align-items-center mr-3 mb-2 mb-md-0">
+                                <label for="tempo" class="mr-2 mb-0" data-lang-en="BPM:" data-lang-ja="BPM:">BPM:</label>
+                                <input type="number" id="tempo" class="form-control form-control-sm" value="120" min="40" max="240" style="width: 70px;">
+                            </div>
+                             <div class="d-flex align-items-center flex-grow-1 mb-2 mb-md-0" style="min-width: 200px;">
+                                <label for="midiOutput" class="mr-2 mb-0" data-lang-en="Output:" data-lang-ja="出力:">Output:</label>
+                                <select id="midiOutput" class="form-control form-control-sm"></select>
+                            </div>
+                        </div>
+                        <!-- TAB Sequencer -->
+                        <div class="card mb-4">
+                            <div class="card-body">
+                                <p class="text-muted mb-3" data-lang-en="Connect your MIDI keyboard and play. Notes are added at the cursor." data-lang-ja="MIDIキーボードを接続して演奏してください。音はカーソル位置に追加されます。">Connect your MIDI keyboard and play. Notes are added at the cursor.</p>
+                                <h4 data-lang-en="Generated TAB" data-lang-ja="生成されたTAB譜">Generated TAB</h4>
+                                <div id="tab-output"></div>
+                            </div>
+                        </div>                <!-- Advanced Data -->
+                 <div class="accordion" id="advancedAccordion">
+                    <div class="card">
+                        <div class="card-header" id="headingAdvanced" data-toggle="collapse" data-target="#collapseAdvanced">
+                            <h5 class="mb-0" data-lang-en="Advanced Data &amp; Logs" data-lang-ja="高度なデータとログ">Advanced Data &amp; Logs</h5>
+                        </div>
+                        <div id="collapseAdvanced" class="collapse">
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6 data-lang-en="Raw TAB Data (JSON)" data-lang-ja="生TABデータ (JSON)">Raw TAB Data (JSON)</h6>
+                                        <pre id="raw-tab-data" class="p-3" style="height: 200px; overflow-y: auto;"></pre>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6 data-lang-en="MIDI Log" data-lang-ja="MIDIログ">MIDI Log</h6>
+                                        <div id="midi-log" class="p-2" style="height: 100px; overflow-y: scroll; border: 1px solid var(--border-color); border-radius: 8px;"></div>
+                                        <h6 class="mt-3" data-lang-en="Debug Info" data-lang-ja="デバッグ情報">Debug Info</h6>
+                                        <div id="mapping-table" class="text-monospace"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Right Column -->
+            <div class="col-md-4">
+                <!-- Tools -->
+                <div class="accordion" id="toolsAccordion">
+                    <!-- Edit Tools -->
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center" id="headingEdit" data-toggle="collapse" data-target="#collapseEdit" aria-expanded="true" aria-controls="collapseEdit">
+                            <h5 class="mb-0" data-lang-en="Edit Tools" data-lang-ja="編集ツール"><i class="bi bi-pencil-square mr-2"></i>Edit Tools</h5>
+                        </div>
+                        <div id="collapseEdit" class="collapse show" aria-labelledby="headingEdit" data-parent="#toolsAccordion">
+                            <div class="card-body">
+                                <button id="addMeasure" class="btn btn-primary btn-block" data-lang-en="Add Measure" data-lang-ja="小節の追加">Add Measure</button>
+                                <small class="text-muted d-block mb-3" data-lang-en="Adds a new, empty measure to the end." data-lang-ja="末尾に新しい空の小節を追加します。">Adds a new, empty measure to the end.</small>
+                                <button id="deleteMeasure" class="btn btn-warning btn-block" data-lang-en="Delete Current Measure" data-lang-ja="現在の小節を削除">Delete Current Measure</button>
+                                <small class="text-muted d-block mb-3" data-lang-en="Deletes the measure at the cursor." data-lang-ja="現在カーソルがある小節を削除します。">Deletes the measure at the cursor.</small>
+                                <button id="clearAll" class="btn btn-danger btn-block" data-lang-en="Clear All" data-lang-ja="全消去">Clear All</button>
+                                <small class="text-muted d-block mb-3" data-lang-en="Deletes all measures and resets the score." data-lang-ja="すべての小節を消去しリセットします。">Deletes all measures and resets the score.</small>
+                                <hr>
+                                <div class="btn-group w-100 mt-2">
+                                   <button id="undoButton" class="btn btn-secondary" disabled="" data-lang-en="Undo" data-lang-ja="元に戻す">Undo</button>
+                                   <button id="redoButton" class="btn btn-secondary" disabled="" data-lang-en="Redo" data-lang-ja="やり直し">Redo</button>
+                                </div>
+                                <small class="text-muted d-block mt-2" data-lang-en="Undo/Redo the last edit operation." data-lang-ja="編集操作を元に戻す/やり直します。">Undo/Redo the last edit operation.</small>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Settings -->
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center collapsed" id="headingSettings" data-toggle="collapse" data-target="#collapseSettings" aria-expanded="false" aria-controls="collapseSettings">
+                                                         <h5 class="mb-0" data-lang-en="Settings" data-lang-ja="設定"><i class="bi bi-gear mr-2"></i>Settings</h5>                        </div>
+                        <div id="collapseSettings" class="collapse" aria-labelledby="headingSettings" data-parent="#toolsAccordion">
+                             <div class="card-body">
+                                <div class="form-group mb-3">
+                                    <label for="conversionMode" class="font-weight-bold" data-lang-en="TAB Conversion Mode" data-lang-ja="TAB変換モード">TAB Conversion Mode</label>
+                                    <select class="form-control" id="conversionMode">
+                                        <option value="shortestFret" data-lang-en="Shortest Fret Priority" data-lang-ja="最短フレット優先">Shortest Fret Priority</option>
+                                        <option value="lowestString" data-lang-en="Lowest String Priority" data-lang-ja="最低音弦優先">Lowest String Priority</option>
+                                    </select>
+                                    <small class="text-muted" data-lang-en="Selection logic when a MIDI note has multiple TAB positions." data-lang-ja="MIDIノートに複数のTAB位置がある場合の選択ロ-ジックです。">Selection logic when a MIDI note has multiple TAB positions.</small>
+                                </div>
+                                <hr>
+                                <label class="font-weight-bold" data-lang-en="Custom Tuning (MIDI Notes)" data-lang-ja="カスタムチューニング (MIDIノート)">Custom Tuning (MIDI Notes)</label>
+                                <small class="text-muted d-block mb-2" data-lang-en="Set open string MIDI notes. (Resets score)" data-lang-ja="開放弦のMIDIノートを設定します。(スコアはリセットされます)">Set open string MIDI notes. (Resets score)</small>
+                                <div class="form-row mb-2">
+                                     <div class="col"><label for="string4" data-lang-en="4(E)" data-lang-ja="4弦(E)">4(E)</label><input type="number" class="form-control" id="string4" value="40" min="0" max="127"></div>
+                                     <div class="col"><label for="string3" data-lang-en="3(A)" data-lang-ja="3弦(A)">3(A)</label><input type="number" class="form-control" id="string3" value="45" min="0" max="127"></div>
+                                     <div class="col"><label for="string2" data-lang-en="2(D)" data-lang-ja="2弦(D)">2(D)</label><input type="number" class="form-control" id="string2" value="50" min="0" max="127"></div>
+                                     <div class="col"><label for="string1" data-lang-en="1(G)" data-lang-ja="1弦(G)">1(G)</label><input type="number" class="form-control" id="string1" value="55" min="0" max="127"></div>
+                                </div>
+                                <button id="applyTuning" class="btn btn-primary btn-sm btn-block" data-lang-en="Apply Tuning" data-lang-ja="チューニングを適用">Apply Tuning</button>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Import / Export -->
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center collapsed" id="headingImportExport" data-toggle="collapse" data-target="#collapseImportExport" aria-expanded="false" aria-controls="collapseImportExport">
+                             <h5 class="mb-0" data-lang-en="Import / Export" data-lang-ja="インポート/エクスポート"><i class="bi bi-arrow-left-right mr-2"></i>Import / Export</h5>
+                        </div>
+                        <div id="collapseImportExport" class="collapse" aria-labelledby="headingImportExport" data-parent="#toolsAccordion">
+                            <div class="card-body">
+                                <label class="font-weight-bold" data-lang-en="Export" data-lang-ja="エクスポート">Export</label>
+                                <p class="mb-3"><small data-lang-en="Save the current score to a file." data-lang-ja="現在のスコアをファイルに保存します。">Save the current score to a file.</small></p>
+                                <button id="exportTextTab" class="btn btn-success btn-sm mr-2" data-lang-en="Export Text" data-lang-ja="テキストで出力">Export Text</button>
+                                <button id="exportJsonData" class="btn btn-info btn-sm mr-2" data-lang-en="Export JSON" data-lang-ja="JSONで出力">Export JSON</button>
+                                <button id="exportWav" class="btn btn-warning btn-sm" data-lang-en="Export WAV" data-lang-ja="WAVで出力">Export WAV</button>
+                                <hr>
+                                <label class="font-weight-bold" data-lang-en="Import" data-lang-ja="インポート">Import</label>
+                                <p class="mb-3"><small data-lang-en="Load a score from a JSON file (exported by this tool)." data-lang-ja="JSONファイル（このツールで出力したもの）からスコアを読み込みます。">Load a score from a JSON file (exported by this tool).</small></p>
+                                <div class="form-group mb-0">
+                                    <label for="importJsonInput" data-lang-en="Import from JSON File:" data-lang-ja="JSONファイルからインポート:" class="d-none"></label>
+                                    <input type="file" class="form-control-file" id="importJsonInput" accept=".json,application/json">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="positionSelectorModal" tabindex="-1" role="dialog" aria-labelledby="positionSelectorModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="positionSelectorModalLabel" data-lang-en="Select Position" data-lang-ja="ポジションを選択">Select Position</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p><span data-lang-en="Select a position for MIDI Note" data-lang-ja="MIDIノート">Select a position for MIDI Note</span> <strong id="modal-midi-note"></strong><span data-lang-en=":" data-lang-ja="のポジションを選択してください:">:</span></p>
+                    <div id="modal-position-list" class="list-group"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Generic Modal for Alerts/Confirmations -->
+    <div class="modal fade" id="appModal" tabindex="-1" role="dialog" aria-labelledby="appModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="appModalLabel"></h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body" id="appModalBody">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="appModalCancel" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="appModalOk">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
